@@ -1,0 +1,38 @@
+#!/bin/bash
+# Script to Install Prometheus Nginx Exporter 
+
+NGINX_EXPORTER_VERSION="1.4.1"
+
+cd /tmp
+wget https://github.com/nginx/nginx-prometheus-exporter/releases/download/v$NGINX_EXPORTER_VERSION/nginx-prometheus-exporter_${NGINX_EXPORTER_VERSION}_linux_amd64.tar.gz
+tar xvfz nginx-prometheus-exporter_${NGINX_EXPORTER_VERSION}_linux_amd64.tar.gz 
+#cd nginx-prometheus-exporter_${NGINX_EXPORTER_VERSION}_linux_amd64
+
+mv nginx-prometheus-exporter /usr/bin/
+rm -rf /tmp/nginx-prometheus-exporter*
+
+useradd -rs /bin/false nginx_exporter
+chown nginx_exporter:nginx_exporter /usr/bin/nginx-prometheus-exporter
+
+
+cat <<EOF> /etc/systemd/system/nginx_exporter.service
+[Unit]
+Description=Prometheus nginx Exporter
+After=network.target
+
+[Service]
+User=nginx_exporter
+Group=nginx_exporter
+Type=simple
+Restart=on-failure
+ExecStart=/usr/bin/nginx-prometheus-exporter
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl start nginx_exporter
+systemctl enable nginx_exporter
+systemctl status nginx_exporter
+nginx_exporter --version
