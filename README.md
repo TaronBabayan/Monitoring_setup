@@ -1,1 +1,1 @@
-# Monitoring_setup
+Monitoring setup scripts and configurations
