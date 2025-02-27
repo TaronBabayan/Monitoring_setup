@@ -1,0 +1,72 @@
+---
+- name: Install Prometheus Node Exporter on all WordPress servers
+  hosts: wordpress_servers
+  become: true
+  tasks:
+    - name: Set Node Exporter version
+      set_fact:
+        node_exporter_version: "1.8.2"
+
+    - name: Download Node Exporter tarball
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+
+    - name: Extract Node Exporter tarball
+      ansible.builtin.unarchive:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Move node_exporter binary to /usr/bin
+      command: mv /tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter /usr/bin
+
+    - name: Create node_exporter user
+      user:
+        name: node_exporter
+        shell: /bin/false
+        system: yes
+
+    - name: Set ownership for node_exporter binary
+      file:
+        path: "/usr/bin/node_exporter"
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+
+    - name: Create systemd service file for Node Exporter
+      copy:
+        dest: "/etc/systemd/system/node_exporter.service"
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          Restart=on-failure
+          ExecStart=/usr/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd daemon to pick up Node Exporter service
+      systemd:
+        daemon_reload: yes
+
+    - name: Start and enable Node Exporter
+      systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+
+    - name: Verify Node Exporter version
+      command: node_exporter --version
+      register: node_exporter_version_output
+      changed_when: false
+
+    - name: Output Node Exporter version
+      debug:
+        var: node_exporter_version_output.stdout

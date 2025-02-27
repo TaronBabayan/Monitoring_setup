@@ -1,0 +1,81 @@
+- name: Install Prometheus Nginx Exporter
+  hosts: wordpress_servers
+  become: yes  # Run as root
+  vars:
+    nginx_exporter_version: "1.4.1"
+    download_url: "https://github.com/nginx/nginx-prometheus-exporter/releases/download/v{{ nginx_exporter_version }}/nginx-prometheus-exporter_{{ nginx_exporter_version }}_linux_amd64.tar.gz"
+
+  tasks:
+    - name: Download Nginx Prometheus Exporter
+      get_url:
+        url: "{{ download_url }}"
+        dest: "/tmp/nginx-prometheus-exporter.tar.gz"
+        mode: '0644'
+
+    - name: Extract Nginx Prometheus Exporter
+      ansible.builtin.unarchive:
+        src: "/tmp/nginx-prometheus-exporter.tar.gz"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Move binary to /usr/bin
+      copy:
+        src: "/tmp/nginx-prometheus-exporter"
+        dest: "/usr/bin/nginx-prometheus-exporter"
+        remote_src: yes
+
+    - name: Remove temporary files
+      file:
+        path: "/tmp/nginx-prometheus-exporter.tar.gz"
+        state: absent
+
+    - name: Create nginx_exporter user
+      user:
+        name: nginx_exporter
+        shell: /bin/false
+        system: yes
+        create_home: no
+
+    - name: Set ownership for Nginx Exporter binary
+      file:
+        path: "/usr/bin/nginx-prometheus-exporter"
+        owner: nginx_exporter
+        group: nginx_exporter
+        mode: '0755'
+
+    - name: Create systemd service for Nginx Exporter
+      copy:
+        dest: "/etc/systemd/system/nginx_exporter.service"
+        content: |
+          [Unit]
+          Description=Prometheus Nginx Exporter
+          After=network.target
+
+          [Service]
+          User=nginx_exporter
+          Group=nginx_exporter
+          Type=simple
+          Restart=on-failure
+          ExecStart=/usr/bin/nginx-prometheus-exporter
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Nginx Exporter service
+      systemd:
+        name: nginx_exporter
+        state: started
+        enabled: yes
+
+    - name: Check service status
+      command: systemctl status nginx_exporter
+      register: service_status
+      changed_when: false
+
+    - name: Print service status
+      debug:
+        msg: "{{ service_status.stdout_lines }}"
